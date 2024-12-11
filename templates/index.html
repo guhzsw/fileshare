@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>局域网文件共享</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .network-info {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #90caf9;
+        }
+        .network-info p {
+            margin: 5px 0;
+            color: #1976d2;
+        }
+        .upload-form {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            text-align: center;
+            background-color: #fafafa;
+            position: relative;
+        }
+        .drag-text {
+            color: #999;
+            margin: 10px 0;
+        }
+        .file-list {
+            list-style: none;
+            padding: 0;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+        .file-item:hover {
+            background-color: #f5f5f5;
+        }
+        .file-info {
+            flex-grow: 1;
+        }
+        .file-name {
+            font-weight: bold;
+            color: #2196F3;
+        }
+        .file-size {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+        .button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            color: white;
+            transition: opacity 0.2s;
+        }
+        .button:hover {
+            opacity: 0.9;
+        }
+        .download-btn {
+            background-color: #4CAF50;
+        }
+        .delete-btn {
+            background-color: #f44336;
+        }
+        .upload-btn {
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        .upload-btn:hover {
+            background-color: #1976D2;
+        }
+        .upload-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background-color: #f0f0f0;
+            border-radius: 2px;
+            margin-top: 10px;
+            display: none;
+        }
+        .progress {
+            width: 0%;
+            height: 100%;
+            background-color: #2196F3;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        @media (max-width: 600px) {
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .actions {
+                margin-top: 10px;
+                width: 100%;
+                justify-content: space-between;
+            }
+            .button {
+                flex: 1;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>局域网文件共享</h1>
+        
+        <div class="network-info">
+            <p>🌐 本机访问地址：<a href="http://localhost:5000">http://localhost:5000</a></p>
+            <p>🔗 局域网访问地址：<a href="http://{{ ip_address }}:5000">http://{{ ip_address }}:5000</a></p>
+        </div>
+
+        <div class="upload-form" id="upload-area">
+            <form action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" id="upload-form">
+                <input type="file" name="file" id="file" required style="display: none;">
+                <div class="drag-text">拖拽文件到此处或点击选择文件</div>
+                <button type="button" class="upload-btn" onclick="document.getElementById('file').click()">选择文件</button>
+                <button type="submit" class="upload-btn" style="display: none;" id="submit-btn">开始上传</button>
+            </form>
+            <div class="progress-bar" id="progress-bar">
+                <div class="progress" id="progress"></div>
+            </div>
+        </div>
+
+        <div class="files-container">
+            <h2>文件列表</h2>
+            {% if files %}
+            <ul class="file-list">
+                {% for file in files %}
+                <li class="file-item">
+                    <div class="file-info">
+                        <div class="file-name">{{ file.name }}</div>
+                        <div class="file-size">大小: {{ file.size }}</div>
+                    </div>
+                    <div class="actions">
+                        <a href="{{ url_for('download_file', filename=file.name) }}" class="button download-btn">下载</a>
+                        <a href="{{ url_for('delete_file', filename=file.name) }}" class="button delete-btn" onclick="return confirm('确定要删除这个文件吗？')">删除</a>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>暂无文件</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file');
+        const submitBtn = document.getElementById('submit-btn');
+        const uploadArea = document.getElementById('upload-area');
+        const progressBar = document.getElementById('progress-bar');
+        const progress = document.getElementById('progress');
+
+        // 文件选择后显示上传按钮
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                submitBtn.style.display = 'inline-block';
+            } else {
+                submitBtn.style.display = 'none';
+            }
+        });
+
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#2196F3';
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#ccc';
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#ccc';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                submitBtn.style.display = 'inline-block';
+            }
+        });
+
+        // 上传进度显示
+        document.getElementById('upload-form').addEventListener('submit', function() {
+            progressBar.style.display = 'block';
+            let width = 0;
+            const interval = setInterval(() => {
+                if (width >= 100) {
+                    clearInterval(interval);
+                } else {
+                    width++;
+                    progress.style.width = width + '%';
+                }
+            }, 50);
+        });
+    </script>
+</body>
+</html>
